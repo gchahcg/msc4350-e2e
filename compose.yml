@@ -1,0 +1,38 @@
+name: msc4350e2e
+
+services:
+  synapse:
+    # Same image the live element stack runs, pinned by digest.
+    image: matrixdotorg/synapse@sha256:7155ddc4835e5b8afa4e1598d92aa16ff1d03109f7d1cff61d493237d1210b1d
+    environment:
+      UID: "${E2E_UID:-1000}"
+      GID: "${E2E_GID:-1000}"
+      SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
+    volumes:
+      - ./artifacts/run/synapse:/data
+    ports:
+      - 127.0.0.1:18008:8008
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
+  # Optional, for the manual look at the ghost message: ./run.sh keep
+  # Element is only reachable through caddy, which serves Element and the homeserver from one
+  # self-signed HTTPS origin. Browsers only enable the crypto APIs Element needs in a secure context,
+  # so plain http://<lan-ip> would not be able to decrypt anything.
+  element:
+    profiles: [element]
+    image: ghcr.io/element-hq/element-web:latest
+    environment:
+      ELEMENT_WEB_PORT: "8080"
+    volumes:
+      - ./artifacts/run/element-config.json:/app/config.json:ro
+
+  caddy:
+    profiles: [element]
+    image: caddy:2.8-alpine
+    environment:
+      E2E_HOST: "${E2E_HOST:-localhost}"
+    volumes:
+      - ./element/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - ${E2E_BIND:-127.0.0.1}:18443:18443

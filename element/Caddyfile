@@ -1,0 +1,17 @@
+{
+	local_certs
+	auto_https disable_redirects
+	skip_install_trust
+	# Clients (browsers included) send no SNI when connecting to a bare IP address.
+	default_sni {$E2E_HOST}
+}
+
+https://{$E2E_HOST}:18443 {
+	tls internal
+	handle /_matrix/* {
+		reverse_proxy synapse:8008
+	}
+	handle {
+		reverse_proxy element:8080
+	}
+}
