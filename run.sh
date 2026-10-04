@@ -204,6 +204,7 @@ cmd_keep() {
   local host="${E2E_HOST:-$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n1)}"
   host="${host:-localhost}"
   export E2E_HOST="$host" E2E_BIND="$host"
+  [[ "$host" == localhost ]] && export E2E_BIND=127.0.0.1
   cmd_up default
   sed "s/@HOST@/$host/g" "$ROOT/element/config.json.tpl" >"$RUN/element-config.json"
   "${COMPOSE[@]}" --profile element up -d element caddy
@@ -242,6 +243,48 @@ EOF2
   log "element is serving the $target wasm"
 }
 
+# element-check [PATCHED_WASM]: drives Element Web in headless Chromium (tests/element) and reads the shield of a
+# bridged message in three setups, expecting a warning with Element's own crypto, none with the patched crypto module
+# (default artifacts/wasm/patched.wasm, build it from a matrix-rust-sdk with MSC4350 support), and a warning again
+# when the bridge doesn't register impersonatable devices.
+cmd_element_check() {
+  local patched="${1:-$ROOT/artifacts/wasm/patched.wasm}" started=""
+  [[ -f "$patched" ]] || { log "no patched wasm at $patched (see the README)"; exit 2; }
+  [[ -d "$ROOT/tests/element/node_modules" ]] || (cd "$ROOT/tests/element" && npm install --no-audit --no-fund >&2)
+  export E2E_HOST=localhost E2E_BIND=127.0.0.1
+  if [[ ! -d "$RUN" ]]; then
+    started=1
+    cmd_keep >&2
+  fi
+  local failures=0 name wasm variant expect result
+  for setup in "stock|stock|default|warning" "patched|$patched|default|none" "patched, msc4350 off|$patched|nomsc4350|warning"; do
+    IFS='|' read -r name wasm variant expect <<<"$setup"
+    cmd_wasm "$wasm" >&2
+    bridge_start "$variant" >&2
+    sleep 2
+    result="$(cd "$ROOT/tests/element" && SHOT_DIR="$ROOT/artifacts/element-shots" node check.mjs 2>/dev/null | tail -n1)"
+    if ! python3 - "$name" "$expect" "$result" <<'PY'
+import json, sys
+name, expect, raw = sys.argv[1:4]
+try:
+    data = json.loads(raw)
+except ValueError:
+    print(f"FAIL {name}: no result from the Element check"); sys.exit(1)
+ok = True
+for when in ("first", "afterReload"):
+    colour = data[when]["shieldColour"]
+    good = (colour == 0) if expect == "none" else (colour != 0)
+    ok = ok and good
+    print(f"{'ok  ' if good else 'FAIL'} {name} ({when}): shieldColour={colour} reason={data[when]['shieldReason']} expected {'no warning' if expect == 'none' else 'a warning'}")
+sys.exit(0 if ok else 1)
+PY
+    then failures=$((failures + 1)); fi
+  done
+  bridge_start default >&2
+  [[ -n "$started" ]] && cmd_down
+  [[ $failures -eq 0 ]]
+}
+
 # say [text] [ghost]: deliver a message from a bridge ghost to alice (the manual-look user).
 cmd_say() {
   local text="${1:-hello from the ghost}" ghost="${2:-bob}"
@@ -262,9 +305,10 @@ case "${1:-}" in
   keep) cmd_keep ;;
   say) shift; cmd_say "$@" ;;
   wasm) shift; cmd_wasm "$@" ;;
+  element-check) shift; cmd_element_check "$@" ;;
   bridge) shift; bridge_start "${1:-default}" ;;
   bridge-stop) bridge_stop ;;
   synapse) shift; cmd_synapse "$@" ;;
   register) shift; cmd_register "$@" ;;
-  *) echo "usage: $0 up [variant] | down | test [go test args] | all | keep | say [text] [ghost] | wasm <stock|file> | bridge <variant> | bridge-stop | synapse <default|legacy> | register <user> <password>" >&2; exit 2 ;;
+  *) echo "usage: $0 up [variant] | down | test [go test args] | all | keep | say [text] [ghost] | wasm <stock|file> | element-check [patched.wasm] | bridge <variant> | bridge-stop | synapse <default|legacy> | register <user> <password>" >&2; exit 2 ;;
 esac

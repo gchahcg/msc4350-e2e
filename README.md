@@ -77,8 +77,8 @@ Three receiving implementations were exercised; none of the first two is merged 
 | Client | Where | Result |
 |---|---|---|
 | mautrix-go crypto (`crypto/impersonation_receive.go`) | branch `msc4350-receive-validation` of the fork, stacked on the bridge branch | T3 (same homeserver) and F3 (client on another homeserver, keys fetched over federation) assert a trusted state; T14 (feature off) stays "unknown device"; unit tests cover each rule |
-| Element Web 1.12.29 with a patched matrix-rust-sdk crypto | local patch, not published | the shield disappears for ghost messages once the ghost's device is known; the stock crypto still shows "The sender of the event does not match the owner of the device who sent it" |
-| matrix-rust-sdk `matrix-sdk-crypto` (feature `experimental-msc4350`) | local branch of a matrix-rust-sdk checkout | 477 tests pass with the feature (465 without); rustfmt and clippy clean; every rule has a test and was mutation-checked |
+| Element Web 1.12.29 with a patched matrix-rust-sdk crypto | [matrix-sdk-crypto-wasm `msc4350`](https://github.com/gchahcg/matrix-sdk-crypto-wasm/tree/msc4350) | `./run.sh element-check`: stock crypto shows "The sender of the event does not match the owner of the device who sent it"; the patched one shows no warning right after the message and after a page reload; with `msc4350` off in the bridge the warning stays |
+| matrix-rust-sdk `matrix-sdk-crypto` (feature `experimental-msc4350`) | [`msc4350-hardening`](https://github.com/gchahcg/matrix-rust-sdk/tree/msc4350-hardening) | 477 tests pass with the feature (465 without); rustfmt and clippy clean; every rule has a test and was mutation-checked |
 
 All three apply the MSC's rules: the impersonating bot's device signed the ghost's device, the embedded impersonator is the bot's real device, the bot's device is cross-signed, the bot is in the room (mautrix-go enforces it, the rust crypto crate only through an optional hook, because it has no room membership), and, if the ghost has cross-signing keys, the ghost's self-signing key signed the device.
 
@@ -118,29 +118,36 @@ code (and the harness shows the reverse: Rust code accepting devices produced by
 ## Receive-side check in a real client (Element Web with a patched crypto)
 
 Element's crypto (matrix-rust-sdk, compiled to wasm) doesn't implement the receiving side of MSC4350 yet, so Element
-keeps showing "The sender of the event does not match the owner of the device who sent it" for bridged messages.
-`./run.sh keep` brings up Element behind a self-signed HTTPS proxy, and `./run.sh wasm <file|stock>` swaps its crypto
-module for a build you provide, which is how a patched matrix-rust-sdk was tried against these tests. The patch
-itself is a prototype and isn't published here.
+shows "The sender of the event does not match the owner of the device who sent it" for bridged messages. The patch in
+the client table above fixes that. `./run.sh element-check` runs it automatically:
 
 ```
-./run.sh keep                  # stack + Element over HTTPS (login alice / alicepw, server test.local)
-./run.sh say "text" ghostname  # a new ghost per message makes a fresh room and key query
-./run.sh wasm <file>           # serve Element with your own crypto wasm
-./run.sh wasm stock            # back to the stock module
+npm install --prefix tests/element   # once: playwright-core, uses a Chromium you already have (CHROMIUM_PATH to override)
+./run.sh element-check [patched.wasm]
 ```
 
-`tools/match_wasm_exports.py` renames the few compiler-hash dependent exports of a wasm built with a different rustc
-than Element's, so it loads with Element's unchanged JS glue.
+It starts the stack with Element behind a self-signed HTTPS proxy (`https://localhost:18443`), drives Element Web in
+headless Chromium (`tests/element/check.mjs`: log in, have the fake bridge send a message from a new ghost, join the
+room, read `getEncryptionInfoForEvent`, reload the page and read it again) and checks three setups: stock crypto warns;
+patched crypto doesn't, also after a reload (which shows the impersonatable devices are persisted); patched crypto with
+the bridge's `msc4350` off warns again. The patched module is a build output you provide (default
+`artifacts/wasm/patched.wasm`):
+
+```
+git clone -b msc4350 https://github.com/gchahcg/matrix-sdk-crypto-wasm   # builds against the matrix-rust-sdk fork
+wasm-pack build --no-pack --target bundler --scope matrix-org --out-dir pkg --weak-refs --release
+python3 tools/match_wasm_exports.py <Element's bundled .wasm> pkg/matrix_sdk_crypto_wasm_bg.wasm artifacts/wasm/patched.wasm
+```
+
+(`tools/match_wasm_exports.py` renames the few compiler-hash dependent exports so a module built with a different
+rustc loads with Element's unchanged JS glue; `wasm-pack` needs a `clang` for wasm32, `zig cc` works as a stand-in.)
+
+Interactive use: `./run.sh keep` (login alice / alicepw), `./run.sh say "text" ghost`, `./run.sh wasm <file|stock>`.
 
 Notes from trying a receive-side implementation: Element decides a message's shield when it first decrypts it, which
 for a freshly joined room is before the `/keys/query` for its members returns, so a re-check on device-list changes
-is needed. A client also needs room-membership data to enforce the MSC's "impersonator is in the room" rule.
-
-## Requirements
-
-Docker (with compose), Go 1.26+, Python 3 with PyYAML, libolm headers (or build with the goolm tag), and curl.
-The test homeserver and credentials are throwaway and only listen on localhost.
+is needed (the check script reads the state a few seconds after the message, once the keys are known). A client also
+needs room-membership data to enforce the MSC's "impersonator is in the room" rule.
 
 ## License
 
