@@ -67,3 +67,7 @@ is needed. A client also needs room-membership data to enforce the MSC's "impers
 
 Docker (with compose), Go 1.26+, Python 3 with PyYAML, libolm headers (or build with the goolm tag), and curl.
 The test homeserver and credentials are throwaway and only listen on localhost.
+
+## License
+
+Mozilla Public License 2.0, the same as mautrix-go. See `LICENSE`.

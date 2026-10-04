@@ -1,3 +1,9 @@
+// Copyright (c) 2026 gchahcg
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 // fakebridge is a minimal bridgev2 network connector used to exercise MSC4350
 // ghost impersonation end-to-end. It has no remote network: messages are
 // injected through a small HTTP endpoint (see inject.go).

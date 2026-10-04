@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 gchahcg
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """Render the fakebridge config from the generated example config.
 
 usage: render_bridge_config.py EXAMPLE OUT RUN_DIR msc4190=true|false msc4350=true|false

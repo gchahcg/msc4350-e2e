@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 gchahcg
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """Patch a generated Synapse homeserver.yaml for the MSC4350 end-to-end tests.
 
 usage: patch_synapse_config.py HOMESERVER_YAML [legacy]
