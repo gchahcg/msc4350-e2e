@@ -37,4 +37,4 @@ require (
 	maunium.net/go/mauflag v1.0.0 // indirect
 )
 
-replace maunium.net/go/mautrix => github.com/gchahcg/go v0.31.1-0.20261004171019-df6cec862c1b
+replace maunium.net/go/mautrix => github.com/gchahcg/go v0.31.1-0.20261004180849-cb962c809bdf
