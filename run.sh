@@ -14,7 +14,7 @@ BIN="$ROOT/bin/fakebridge"
 HS=http://127.0.0.1:18008
 INJECT=127.0.0.1:29400
 COMPOSE=(docker compose -f "$ROOT/compose.yml")
-SYNAPSE_IMAGE="$(sed -n 's/^ *image: \(matrixdotorg\/synapse@.*\)$/\1/p' "$ROOT/compose.yml")"
+SYNAPSE_IMAGE="$(sed -n 's/^ *image: \(matrixdotorg\/synapse@.*\)$/\1/p' "$ROOT/compose.yml" | head -n1)"
 export E2E_UID="$(id -u)" E2E_GID="$(id -g)"
 
 log() { echo "[run.sh] $*" >&2; }
@@ -91,6 +91,24 @@ wait_synapse() {
   exit 1
 }
 
+HS_B=http://127.0.0.1:18009
+
+# Extra arguments for patch_synapse_config.py on the main homeserver: "federation" when the second homeserver is used.
+a_patch_args() {
+  [[ -f "$RUN/federation" ]] && echo federation
+  return 0
+}
+
+wait_synapse_b() {
+  for _ in $(seq 1 150); do
+    if curl -fsS "$HS_B/_matrix/client/versions" >/dev/null 2>&1; then return 0; fi
+    sleep 0.5
+  done
+  log "the second synapse did not become healthy"
+  "${COMPOSE[@]}" --profile federation logs --tail 50 synapse-b >&2 || true
+  exit 1
+}
+
 cmd_up() {
   local variant="${1:-default}"
   if [[ -d "$RUN" ]]; then
@@ -108,11 +126,28 @@ cmd_up() {
   log "generating synapse config"
   docker run --rm -e SYNAPSE_SERVER_NAME=test.local -e SYNAPSE_REPORT_STATS=no \
     -e UID="$E2E_UID" -e GID="$E2E_GID" -v "$RUN/synapse:/data" "$SYNAPSE_IMAGE" generate >/dev/null
-  python3 "$ROOT/patch_synapse_config.py" "$RUN/synapse/homeserver.yaml"
+  if [[ -n "${E2E_FEDERATION:-}" ]]; then
+    touch "$RUN/federation"
+    log "setting up the second homeserver (b.test.local) for federation"
+    mkdir -p "$RUN/synapse-b"
+    openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=test.local" \
+      -addext "subjectAltName=DNS:test.local,DNS:b.test.local" \
+      -keyout "$RUN/synapse/tls.key" -out "$RUN/synapse/tls.crt" 2>/dev/null
+    cp "$RUN/synapse/tls.key" "$RUN/synapse/tls.crt" "$RUN/synapse-b/"
+    docker run --rm -e SYNAPSE_SERVER_NAME=b.test.local -e SYNAPSE_REPORT_STATS=no \
+      -e UID="$E2E_UID" -e GID="$E2E_GID" -v "$RUN/synapse-b:/data" "$SYNAPSE_IMAGE" generate >/dev/null
+    python3 "$ROOT/patch_synapse_config.py" "$RUN/synapse-b/homeserver.yaml" federation remote
+  fi
+  # shellcheck disable=SC2046
+  python3 "$ROOT/patch_synapse_config.py" "$RUN/synapse/homeserver.yaml" $(a_patch_args)
 
   log "starting synapse"
   "${COMPOSE[@]}" up -d synapse
   wait_synapse
+  if [[ -f "$RUN/federation" ]]; then
+    "${COMPOSE[@]}" --profile federation up -d synapse-b
+    wait_synapse_b
+  fi
   bridge_start "$variant"
   log "stack is up (homeserver $HS, inject http://$INJECT)"
 }
@@ -122,8 +157,8 @@ cmd_up() {
 cmd_synapse() {
   local mode="${1:-default}" variant
   case "$mode" in
-    default) variant=default; python3 "$ROOT/patch_synapse_config.py" "$RUN/synapse/homeserver.yaml" ;;
-    legacy) variant=nomsc4190; python3 "$ROOT/patch_synapse_config.py" "$RUN/synapse/homeserver.yaml" legacy ;;
+    default) variant=default; python3 "$ROOT/patch_synapse_config.py" "$RUN/synapse/homeserver.yaml" $(a_patch_args) ;;
+    legacy) variant=nomsc4190; python3 "$ROOT/patch_synapse_config.py" "$RUN/synapse/homeserver.yaml" legacy $(a_patch_args) ;;
     *) log "unknown synapse mode: $mode"; exit 2 ;;
   esac
   render_config "$variant"
@@ -140,15 +175,18 @@ cmd_down() {
     mkdir -p "$LAST"
     cp -f "$RUN/bridge.stdout" "$LAST/" 2>/dev/null || true
     "${COMPOSE[@]}" logs --no-color synapse >"$LAST/synapse.log" 2>&1 || true
+    "${COMPOSE[@]}" --profile federation logs --no-color synapse-b >"$LAST/synapse-b.log" 2>&1 || true
   fi
-  "${COMPOSE[@]}" --profile element down -v --remove-orphans >&2 || true
+  "${COMPOSE[@]}" --profile element --profile federation down -v --remove-orphans >&2 || true
   # Synapse data is written as our uid, but be safe about leftovers.
   rm -rf "$RUN" 2>/dev/null || docker run --rm -v "$ROOT/artifacts:/a" busybox rm -rf /a/run
   log "stack is down (logs of the last run are in $LAST)"
 }
 
 cmd_test() {
-  (cd "$ROOT" && E2E_RUN_DIR="$RUN" E2E_HS="$HS" E2E_INJECT="http://$INJECT" E2E_SCRIPT="$ROOT/run.sh" \
+  local hs_b=""
+  [[ -f "$RUN/federation" ]] && hs_b="$HS_B"
+  (cd "$ROOT" && E2E_RUN_DIR="$RUN" E2E_HS="$HS" E2E_HS_B="$hs_b" E2E_INJECT="http://$INJECT" E2E_SCRIPT="$ROOT/run.sh" \
     go test -count=1 -v ./tests/... "$@")
 }
 

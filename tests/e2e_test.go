@@ -65,6 +65,15 @@ func requireImpersonatableDevice(t *testing.T, cli *mautrix.Client, ghost id.Use
 	require.True(t, ok, "ghost device ID should equal the bot's device ID %s", botDevID)
 	dk := decodeObject(t, raw)
 
+	// Nothing may be added to or dropped from the uploaded object, apart from the server's own `unsigned` data.
+	for field := range dk {
+		assert.Contains(t, []string{"algorithms", "device_id", impersonatorKey, "keys", "signatures", "unsigned", "user_id"}, field,
+			"unexpected field in the ghost device keys")
+	}
+	for _, field := range []string{"algorithms", "device_id", impersonatorKey, "keys", "signatures", "user_id"} {
+		assert.Contains(t, dk, field, "missing field in the ghost device keys")
+	}
+
 	assert.Equal(t, string(ghost), dk["user_id"])
 	assert.Equal(t, string(botDevID), dk["device_id"])
 	assert.Equal(t, []any{}, dk["algorithms"], "ghost device must advertise no algorithms")

@@ -122,3 +122,8 @@ func Login(ctx context.Context, hs, username, password string) (*mautrix.Client,
 func UserID(localpart string) id.UserID {
 	return id.NewUserID(localpart, "test.local")
 }
+
+// UserIDOn builds a full Matrix user ID on the given server (for example the second homeserver, "b.test.local").
+func UserIDOn(localpart, serverName string) id.UserID {
+	return id.NewUserID(localpart, serverName)
+}

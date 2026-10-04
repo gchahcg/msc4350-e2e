@@ -95,7 +95,7 @@ func (cl *Client) IsThisUser(ctx context.Context, userID networkid.UserID) bool 
 func ptr[T any](v T) *T { return &v }
 
 func (cl *Client) GetChatInfo(ctx context.Context, portal *bridgev2.Portal) (*bridgev2.ChatInfo, error) {
-	// Portal IDs are the ghost's remote user ID, see inject.go.
+	// A portal is named after the ghost it was created for (or the explicit portal), see inject.go.
 	ghost := networkid.UserID(portal.ID)
 	members := bridgev2.ChatMemberMap{}
 	members.Set(bridgev2.ChatMember{

@@ -78,6 +78,7 @@ type injectResult struct {
 	RoomID    id.RoomID `json:"room_id"`
 	GhostMXID id.UserID `json:"ghost_mxid"`
 	MessageID string    `json:"message_id"`
+	PortalID  string    `json:"portal_id"`
 }
 
 // inject makes the fake bridge deliver a message from the given remote ghost to the Matrix user.
@@ -89,8 +90,20 @@ func inject(t *testing.T, user id.UserID, ghost, text string) injectResult {
 }
 
 func tryInject(ctx context.Context, user id.UserID, ghost, text string) (injectResult, error) {
+	return tryInjectInto(ctx, user, ghost, "", text)
+}
+
+// injectInto is like inject, but delivers the message to an existing portal, so several ghosts can share a room.
+func injectInto(t *testing.T, user id.UserID, ghost, portal, text string) injectResult {
+	t.Helper()
+	res, err := tryInjectInto(t.Context(), user, ghost, portal, text)
+	require.NoError(t, err)
+	return res
+}
+
+func tryInjectInto(ctx context.Context, user id.UserID, ghost, portal, text string) (injectResult, error) {
 	var res injectResult
-	body, _ := json.Marshal(map[string]string{"user_mxid": string(user), "ghost": ghost, "text": text})
+	body, _ := json.Marshal(map[string]string{"user_mxid": string(user), "ghost": ghost, "text": text, "portal": portal})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, injectURL+"/inject", bytes.NewReader(body))
 	if err != nil {
 		return res, err

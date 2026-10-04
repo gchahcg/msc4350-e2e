@@ -34,12 +34,16 @@ type injectRequest struct {
 	// Ghost is the remote user ID of the sender, which becomes a bridge ghost.
 	Ghost string `json:"ghost"`
 	Text  string `json:"text"`
+	// Portal optionally names the chat to deliver the message to (default: a chat named after the ghost).
+	// Using the same portal for different ghosts puts several ghosts in one room.
+	Portal string `json:"portal"`
 }
 
 type injectResponse struct {
 	RoomID    id.RoomID `json:"room_id"`
 	GhostMXID id.UserID `json:"ghost_mxid"`
 	MessageID string    `json:"message_id"`
+	PortalID  string    `json:"portal_id"`
 }
 
 var injectCounter atomic.Int64
@@ -100,7 +104,11 @@ func (c *Connector) inject(ctx context.Context, req *injectRequest) (*injectResp
 			return nil, fmt.Errorf("failed to create login: %w", err)
 		}
 	}
-	key := networkid.PortalKey{ID: networkid.PortalID(req.Ghost), Receiver: loginID}
+	portalID := req.Portal
+	if portalID == "" {
+		portalID = req.Ghost
+	}
+	key := networkid.PortalKey{ID: networkid.PortalID(portalID), Receiver: loginID}
 	msgID := networkid.MessageID(fmt.Sprintf("inject-%d-%d", time.Now().UnixNano(), injectCounter.Add(1)))
 	text := req.Text
 	res := login.QueueRemoteEvent(&simplevent.Message[string]{
@@ -135,7 +143,7 @@ func (c *Connector) inject(ctx context.Context, req *injectRequest) (*injectResp
 				if err != nil {
 					return nil, fmt.Errorf("failed to get ghost: %w", err)
 				}
-				return &injectResponse{RoomID: portal.MXID, GhostMXID: ghost.Intent.GetMXID(), MessageID: string(msgID)}, nil
+				return &injectResponse{RoomID: portal.MXID, GhostMXID: ghost.Intent.GetMXID(), MessageID: string(msgID), PortalID: portalID}, nil
 			}
 		}
 		select {

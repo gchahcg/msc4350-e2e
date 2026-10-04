@@ -26,7 +26,47 @@ the bridge logs and the bridge database. Nothing in `/opt/stacks/element` is tou
 | T7 | extra | negative control: `msc4350: false` means no ghost devices |
 | T8 | extra | the bot's own device keeps its keys and is not impersonatable |
 
+| T9 | server | a user who shares no room with the ghost gets the complete device |
+| T10 | server | a user with cross-signing keys gets the same, signed only by the bot |
+| T11 | server | the bridge bot itself (appservice token) gets its ghost's device |
+| T12 | server | explicit device ID query, other ID returns nothing, ghost appears in `/keys/changes` after joining |
+| T13 | observation | after the bot's device changes, the ghost registers a new device and the old one stays behind (documented, not a requirement) |
+| F1 | federation | remote user joins after registration: the remote homeserver fetches the device over federation |
+| F2 | federation | a new ghost registers after the remote user is in the room: the remote homeserver learns about it via device list updates / resync |
+| F3 | federation | a client on the remote homeserver decrypts the ghost's message, which references the ghost device as the remote homeserver reports it |
+
+The F tests need the second homeserver: `E2E_FEDERATION=1 ./run.sh all` (they skip otherwise).
+
 Sanity check of the harness itself: `./run.sh up nomsc4350 && ./run.sh test` makes T1, T2, T3 and T6 fail.
+
+## Server conformance (MSC4350: "servers MUST include signatures from the impersonator user in /keys/query responses, in both the C-S and S-S APIs, regardless of who is querying")
+
+Tested against Synapse `matrixdotorg/synapse@sha256:7155ddc4835e5b8afa4e1598d92aa16ff1d03109f7d1cff61d493237d1210b1d`
+(the image the live element stack runs). Synapse needs no change: it builds each device in `/keys/query` (and in the
+federation `user/keys/query`) from the JSON the ghost uploaded, so the bot's signature and the unknown
+`fi.mau.msc4350.impersonator` field come back exactly as uploaded
+(`get_e2e_device_keys_and_signatures` and `_get_e2e_device_keys_for_federation_query_inner` in
+`synapse/storage/databases/main/end_to_end_keys.py`).
+
+| Querier | Result |
+|---|---|
+| user sharing a room with the ghost (T2) | complete device, bot signature verifies |
+| user sharing no room (T9) | same |
+| user with cross-signing keys (T10) | same, nothing extra signed |
+| the bot itself (T11) | same |
+| explicit device ID / unknown device ID (T12) | returned / empty |
+| remote user on a second Synapse, joined after registration (F1) | same, fetched over federation (`user/keys/query`) |
+| remote user, ghost registered later (F2) | same, learned via device list update / resync |
+| decrypting client on the remote homeserver (F3) | message decrypts, `device_id` matches the remote server's view of the ghost device |
+
+Quirks: Synapse adds an empty `"signatures": {"<ghost>": {}}` entry (not a signature; tests ignore empty signer maps)
+and its own `unsigned.device_display_name`. After the bot's device changes the old ghost device stays (T13).
+Not covered: other homeserver implementations.
+
+How the federation setup works: two Synapses (`test.local`, `b.test.local`) on one docker network, TLS with a
+self-signed certificate and certificate/IP checks disabled (test only). They find each other through
+`/.well-known/matrix/server` on port 443, which also serves federation, because docker's DNS answers the SRV lookup
+that would come first with SERVFAIL.
 
 ## Layout
 

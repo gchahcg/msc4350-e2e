@@ -14,6 +14,27 @@ services:
       - 127.0.0.1:18008:8008
     extra_hosts:
       - host.docker.internal:host-gateway
+    networks:
+      default:
+        aliases:
+          - test.local
+
+  # Second homeserver for the federation tests: E2E_FEDERATION=1 ./run.sh up
+  synapse-b:
+    profiles: [federation]
+    image: matrixdotorg/synapse@sha256:7155ddc4835e5b8afa4e1598d92aa16ff1d03109f7d1cff61d493237d1210b1d
+    environment:
+      UID: "${E2E_UID:-1000}"
+      GID: "${E2E_GID:-1000}"
+      SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
+    volumes:
+      - ./artifacts/run/synapse-b:/data
+    ports:
+      - 127.0.0.1:18009:8008
+    networks:
+      default:
+        aliases:
+          - b.test.local
 
   # Optional, for the manual look at the ghost message: ./run.sh keep
   # Element is only reachable through caddy, which serves Element and the homeserver from one
