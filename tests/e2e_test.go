@@ -315,4 +315,3 @@ func passwordLogin(name string) *mautrix.ReqLogin {
 		Password:   password,
 	}
 }
-
