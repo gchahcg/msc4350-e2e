@@ -162,6 +162,9 @@ func TestF3_RemoteClientDecryptsGhostMessage(t *testing.T) {
 	defer mu.Unlock()
 	assert.Equal(t, second.GhostMXID, decrypted.Sender)
 	assert.True(t, decrypted.Mautrix.WasEncrypted)
+	// The remote client validates the impersonation with keys it got over federation.
+	assert.GreaterOrEqual(t, int(decrypted.Mautrix.TrustState), int(id.TrustStateCrossSignedUntrusted),
+		"the ghost's message should be trusted by the remote client, got %v", decrypted.Mautrix.TrustState)
 	waitForGhostDevice(t, cli, second.GhostMXID)
 	ghostDevice := requireImpersonatableDevice(t, cli, second.GhostMXID)
 	assert.Equal(t, ghostDevice, encrypted.Content.AsEncrypted().DeviceID,

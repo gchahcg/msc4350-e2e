@@ -19,7 +19,7 @@ the bridge logs and the bridge database. Nothing in `/opt/stacks/element` is tou
 |---|---|---|
 | T1 | step 1 | first message from a new ghost logs exactly one registration; a second message logs none |
 | T2 | step 2 | `/keys/query`: ghost device ID = bot device ID, `algorithms: []`, `keys: {}`, only the bot signed it, impersonator == bot's device keys minus signatures, bot signature verifies and fails on tampering |
-| T3 | step 3 (API part) | a real client (cryptohelper) decrypts the ghost's message, and the encrypted event's `device_id` is the ghost's registered device |
+| T3 | step 3 (API part), client | a real client (cryptohelper) decrypts the ghost's message, the encrypted event's `device_id` is the ghost's registered device, and the client **trusts** the message (it validates the impersonation) |
 | T4 | step 4 | bridge restart: no second registration, same single ghost device, one `crypto_impersonatable_device` row |
 | T5 | step 5 | `msc4350` without `msc4190`: startup warning, no registration, no ghost devices, messages still delivered |
 | T6 | extra | 8 concurrent first messages from one ghost register it once (singleflight) |
@@ -30,6 +30,7 @@ the bridge logs and the bridge database. Nothing in `/opt/stacks/element` is tou
 | T10 | server | a user with cross-signing keys gets the same, signed only by the bot |
 | T11 | server | the bridge bot itself (appservice token) gets its ghost's device |
 | T12 | server | explicit device ID query, other ID returns nothing, ghost appears in `/keys/changes` after joining |
+| T14 | client | negative control: with `msc4350` off the receiving client doesn't trust the ghost's message (unknown device) |
 | T13 | observation | after the bot's device changes, the ghost registers a new device and the old one stays behind (documented, not a requirement) |
 | F1 | federation | remote user joins after registration: the remote homeserver fetches the device over federation |
 | F2 | federation | a new ghost registers after the remote user is in the room: the remote homeserver learns about it via device list updates / resync |
@@ -67,6 +68,39 @@ How the federation setup works: two Synapses (`test.local`, `b.test.local`) on o
 self-signed certificate and certificate/IP checks disabled (test only). They find each other through
 `/.well-known/matrix/server` on port 443, which also serves federation, because docker's DNS answers the SRV lookup
 that would come first with SERVFAIL.
+
+
+## Client conformance (MSC4350: "a client that validates impersonation requirements")
+
+Three receiving implementations were exercised; none of the first two is merged anywhere yet.
+
+| Client | Where | Result |
+|---|---|---|
+| mautrix-go crypto (`crypto/impersonation_receive.go`) | branch `msc4350-receive-validation` of the fork, stacked on the bridge branch | T3 (same homeserver) and F3 (client on another homeserver, keys fetched over federation) assert a trusted state; T14 (feature off) stays "unknown device"; unit tests cover each rule |
+| Element Web 1.12.29 with a patched matrix-rust-sdk crypto | local patch, not published | the shield disappears for ghost messages once the ghost's device is known; the stock crypto still shows "The sender of the event does not match the owner of the device who sent it" |
+| matrix-rust-sdk `matrix-sdk-crypto` (feature `experimental-msc4350`) | local branch of a matrix-rust-sdk checkout | 477 tests pass with the feature (465 without); rustfmt and clippy clean; every rule has a test and was mutation-checked |
+
+All three apply the MSC's rules: the impersonating bot's device signed the ghost's device, the embedded impersonator is the bot's real device, the bot's device is cross-signed, the bot is in the room (mautrix-go enforces it, the rust crypto crate only through an optional hook, because it has no room membership), and, if the ghost has cross-signing keys, the ghost's self-signing key signed the device.
+
+### Cross-implementation test vector
+
+`vectors/rust_ghost_device.json` is a ghost device and the bot device keys produced and signed by matrix-rust-sdk
+(`cargo test -p matrix-sdk-crypto --features experimental-msc4350 test_print_test_vector -- --ignored --nocapture`).
+mautrix-go's receive tests verify it, so a verifier written in another language accepts a signature produced by Rust
+code (and the harness shows the reverse: Rust code accepting devices produced by mautrix-go).
+
+### Notes for client implementers (from trying it in Element)
+
+- **Re-checking.** Element decides a message's shield when it first decrypts it, which for a freshly joined room is
+  before the `/keys/query` for the room's members returns. Element re-checks on `Decrypted` and
+  `UserTrustStatusChanged`, and js-sdk emits the latter only for cross-signing identity updates. A ghost has no
+  identity, so a device that arrives later doesn't refresh an already displayed message. A fix needs a small change
+  in Element/js-sdk (also re-check on `DevicesUpdated` for the sender, and have the crypto library report impersonatable
+  device changes through the device updates stream), or the library needs to answer synchronously.
+- **Persistence.** Impersonatable devices must be remembered across restarts. The rust patch stores them in the crypto
+  store's generic custom values (no schema change); the mautrix-go version refetches lazily.
+- **Room membership.** The rule that the impersonator must be in the room needs membership data that a crypto library
+  usually doesn't have. The rust patch takes an optional callback; embedding SDKs should supply it.
 
 ## Layout
 

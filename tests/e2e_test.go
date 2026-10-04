@@ -150,8 +150,40 @@ func TestT2_KeysQueryShape(t *testing.T) {
 // the encrypted event points at the ghost's registered (impersonatable) device.
 func TestT3_GhostMessageDecryptsWithGhostDevice(t *testing.T) {
 	requireStack(t)
+	cli, res, encrypted, decrypted := receiveGhostMessage(t, "decrypt me")
+
+	assert.Equal(t, res.GhostMXID, encrypted.Sender)
+	assert.Equal(t, res.GhostMXID, decrypted.Sender)
+	assert.Equal(t, "decrypt me", decrypted.Content.AsMessage().Body)
+	assert.True(t, decrypted.Mautrix.WasEncrypted)
+
+	ghostDevID := requireImpersonatableDevice(t, cli, res.GhostMXID)
+	assert.Equal(t, ghostDevID, encrypted.Content.AsEncrypted().DeviceID, "the encrypted event must reference the ghost's registered device")
+
+	// The receiving client validates the impersonation (MSC4350): the bridge bot's device is cross-signed
+	// (self_sign), so the message is trusted as coming from a device of the ghost.
+	assert.GreaterOrEqual(t, int(decrypted.Mautrix.TrustState), int(id.TrustStateCrossSignedUntrusted),
+		"the ghost's message should be trusted, got %v", decrypted.Mautrix.TrustState)
+	if assert.NotNil(t, decrypted.Mautrix.TrustSource) {
+		assert.Equal(t, res.GhostMXID, decrypted.Mautrix.TrustSource.UserID)
+	}
+}
+
+// T14: negative control for the receiving side: without an impersonatable device the same message is not trusted
+// as coming from a device of the ghost.
+func TestT14_WithoutImpersonatableDeviceMessageIsNotTrusted(t *testing.T) {
+	requireStack(t)
+	restartBridge(t, "nomsc4350")
+	_, _, _, decrypted := receiveGhostMessage(t, "no impersonation")
+	assert.Equal(t, id.TrustStateUnknownDevice, decrypted.Mautrix.TrustState)
+}
+
+// receiveGhostMessage starts a client with end-to-end encryption, has a new ghost send it a message, and returns
+// the encrypted and the decrypted form of that message.
+func receiveGhostMessage(t *testing.T, text string) (*mautrix.Client, injectResult, *event.Event, *event.Event) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	name := uniq("alice")
 	require.NoError(t, registerUser(ctx, name))
@@ -189,7 +221,7 @@ func TestT3_GhostMessageDecryptsWithGhostDevice(t *testing.T) {
 	require.NoError(t, err)
 	helper.LoginAs = passwordLogin(name)
 	require.NoError(t, helper.Init(ctx))
-	defer helper.Close()
+	t.Cleanup(func() { _ = helper.Close() })
 	cli.Crypto = helper
 	syncCtx, stopSync := context.WithCancel(ctx)
 	syncDone := make(chan struct{})
@@ -197,10 +229,9 @@ func TestT3_GhostMessageDecryptsWithGhostDevice(t *testing.T) {
 		defer close(syncDone)
 		_ = cli.SyncWithContext(syncCtx)
 	}()
-	defer func() { stopSync(); <-syncDone }()
+	t.Cleanup(func() { stopSync(); <-syncDone })
 
-	ghost := uniq("ghost")
-	res := inject(t, cli.UserID, ghost, "decrypt me")
+	res := inject(t, cli.UserID, uniq("ghost"), text)
 
 	require.Eventually(t, func() bool {
 		mu.Lock()
@@ -210,18 +241,9 @@ func TestT3_GhostMessageDecryptsWithGhostDevice(t *testing.T) {
 	}, 60*time.Second, 250*time.Millisecond, "timed out waiting for the encrypted and decrypted event")
 
 	mu.Lock()
+	defer mu.Unlock()
 	s := got[res.RoomID]
-	mu.Unlock()
-	assert.Equal(t, res.GhostMXID, s.encrypted.Sender)
-	assert.Equal(t, res.GhostMXID, s.decrypted.Sender)
-	assert.Equal(t, "decrypt me", s.decrypted.Content.AsMessage().Body)
-	assert.True(t, s.decrypted.Mautrix.WasEncrypted)
-
-	encContent := s.encrypted.Content.AsEncrypted()
-	ghostDevID := requireImpersonatableDevice(t, cli, res.GhostMXID)
-	assert.Equal(t, ghostDevID, encContent.DeviceID, "the encrypted event must reference the ghost's registered device")
-	t.Logf("receive-side trust state for the ghost's message: %v (informational, receive-side validation is a follow-up)",
-		s.decrypted.Mautrix.TrustState)
+	return cli, res, s.encrypted, s.decrypted
 }
 
 // T4: runbook step 4.
