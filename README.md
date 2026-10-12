@@ -20,11 +20,12 @@ the bridge logs and the bridge database. Nothing in `/opt/stacks/element` is tou
 | T1 | step 1 | first message from a new ghost logs exactly one registration; a second message logs none |
 | T2 | step 2 | `/keys/query`: ghost device ID = bot device ID, `algorithms: []`, `keys: {}`, only the bot signed it, impersonator == bot's device keys minus signatures, bot signature verifies and fails on tampering |
 | T3 | step 3 (API part), client | a real client (cryptohelper) decrypts the ghost's message, the encrypted event's `device_id` is the ghost's registered device, and the client **trusts** the message (it validates the impersonation) |
-| T4 | step 4 | bridge restart: no second registration, same single ghost device, one `crypto_impersonatable_device` row |
+| T4 | step 4 | bridge restart: no second registration, same single ghost device, one `mx_registrations` row recording the bot device |
 | T5 | step 5 | `msc4350` without `msc4190`: startup warning, no registration, no ghost devices, messages still delivered |
 | T6 | extra | 8 concurrent first messages from one ghost register it once (singleflight) |
 | T7 | extra | negative control: `msc4350: false` means no ghost devices |
 | T8 | extra | the bot's own device keeps its keys and is not impersonatable |
+| T15 | extra | a ghost registered before the feature (no device recorded in `mx_registrations`) gets its device on its next message, once |
 
 | T9 | server | a user who shares no room with the ghost gets the complete device |
 | T10 | server | a user with cross-signing keys gets the same, signed only by the bot |

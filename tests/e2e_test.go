@@ -265,8 +265,37 @@ func TestT4_RestartDoesNotRegisterAgain(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 	var count int
-	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM crypto_impersonatable_device WHERE user_id=?`, string(res.GhostMXID)).Scan(&count))
-	assert.Equal(t, 1, count, "expected one crypto_impersonatable_device row for the ghost")
+	var storedDevice, storedKey string
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM mx_registrations WHERE user_id=?`, string(res.GhostMXID)).Scan(&count))
+	assert.Equal(t, 1, count, "expected one mx_registrations row for the ghost")
+	require.NoError(t, db.QueryRow(`SELECT impersonator_device_id, impersonator_signing_key FROM mx_registrations WHERE user_id=?`, string(res.GhostMXID)).Scan(&storedDevice, &storedKey))
+	assert.Equal(t, string(devID), storedDevice, "mx_registrations must record the bot device the ghost device was made for")
+	assert.NotEmpty(t, storedKey, "mx_registrations must record the bot's signing key")
+}
+
+// T15: a ghost that was registered before msc4350 was enabled (no device recorded in mx_registrations) gets its
+// impersonatable device on its next encrypted message.
+func TestT15_ExistingGhostWithoutRecordedDeviceGetsOne(t *testing.T) {
+	requireStack(t)
+	cli, user := newUser(t)
+	ghost := uniq("ghost")
+	res := inject(t, user, ghost, "before the backfill")
+	requireImpersonatableDevice(t, cli, res.GhostMXID)
+
+	runScript(t, "bridge-stop")
+	t.Cleanup(func() { runScript(t, "bridge", "default") })
+	db, err := sql.Open("sqlite3", "file:"+runDir+"/bridge.db?_txlock=immediate")
+	require.NoError(t, err)
+	_, err = db.Exec(`UPDATE mx_registrations SET impersonator_device_id=NULL, impersonator_signing_key=NULL WHERE user_id=?`, string(res.GhostMXID))
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+	offset := logOffset(t)
+	runScript(t, "bridge", "default")
+	inject(t, user, ghost, "after the backfill")
+
+	assert.Len(t, registrations(t, offset, res.GhostMXID), 1, "the ghost must get its device once after the state was cleared")
+	inject(t, user, ghost, "and again")
+	assert.Len(t, registrations(t, offset, res.GhostMXID), 1, "the backfill must not repeat")
 }
 
 // T5: runbook step 5.
