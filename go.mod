@@ -6,6 +6,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/stretchr/testify v1.12.0
 	go.mau.fi/util v0.10.2-0.20260918225449-a4c0d5b86aa8
+	gopkg.in/yaml.v3 v3.0.1
 	maunium.net/go/mautrix v0.0.0
 )
 
@@ -33,8 +34,7 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	maunium.net/go/mauflag v1.0.0 // indirect
 )
 
-replace maunium.net/go/mautrix => github.com/gchahcg/go v0.31.1-0.20261012180607-38aa65ecfcf9
+replace maunium.net/go/mautrix => github.com/gchahcg/go v0.31.1-0.20261016213047-fb351a199432

@@ -6,8 +6,8 @@ github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNU
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/coreos/go-systemd/v22 v22.7.0 h1:LAEzFkke61DFROc7zNLX/WA2i5J8gYqe0rSj9KI28KA=
 github.com/coreos/go-systemd/v22 v22.7.0/go.mod h1:xNUYtjHu2EDXbsxz1i41wouACIwT7Ybq9o0BQhMwD0w=
-github.com/gchahcg/go v0.31.1-0.20261012180607-38aa65ecfcf9 h1:dPR6IbM2TXf6NlRVf+al0oVv320tNYKgo567Q9RUt5I=
-github.com/gchahcg/go v0.31.1-0.20261012180607-38aa65ecfcf9/go.mod h1:t97J+6KmbmeoepWOunBgpu1xIvuBpI36ebBqIbYT8Jk=
+github.com/gchahcg/go v0.31.1-0.20261016213047-fb351a199432 h1:LKneu8o/9Ybu4VtwoUKDM6qIdtM6JizlzcusW+wjYOQ=
+github.com/gchahcg/go v0.31.1-0.20261016213047-fb351a199432/go.mod h1:t97J+6KmbmeoepWOunBgpu1xIvuBpI36ebBqIbYT8Jk=
 github.com/lib/pq v1.12.3 h1:tTWxr2YLKwIvK90ZXEw8GP7UFHtcbTtty8zsI+YjrfQ=
 github.com/lib/pq v1.12.3/go.mod h1:/p+8NSbOcwzAEI7wiMXFlgydTwcgTr3OSKMsD2BitpA=
 github.com/mattn/go-colorable v0.1.14 h1:9A9LHSqF/7dyVVX6g0U9cwm9pG3kP9gSzcuIPHPsaIE=
