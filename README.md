@@ -141,9 +141,14 @@ the bridge's `msc4350` off warns again. The patched module is a build output you
 
 ```
 git clone -b msc4350 https://github.com/gchahcg/matrix-sdk-crypto-wasm   # builds against the matrix-rust-sdk fork
-wasm-pack build --no-pack --target bundler --scope matrix-org --out-dir pkg --weak-refs --release
+wasm-pack build --no-pack --target bundler --scope matrix-org --out-dir pkg --weak-refs --release -- --features msc4350-test-membership-check
 python3 tools/match_wasm_exports.py <Element's bundled .wasm> pkg/matrix_sdk_crypto_wasm_bg.wasm artifacts/wasm/patched.wasm
 ```
+
+The crypto crate only accepts an impersonation once the embedding SDK provides a check that the bot is in the room,
+and Element's (unchanged) JavaScript doesn't provide one. The `msc4350-test-membership-check` feature of the wasm build
+sets a check that treats everyone as a member, so this setup tests everything except the membership requirement,
+which the crate's unit tests cover.
 
 (`tools/match_wasm_exports.py` renames the few compiler-hash dependent exports so a module built with a different
 rustc loads with Element's unchanged JS glue; `wasm-pack` needs a `clang` for wasm32, `zig cc` works as a stand-in.)
