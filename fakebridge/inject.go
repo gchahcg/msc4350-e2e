@@ -37,6 +37,8 @@ type injectRequest struct {
 	// Portal optionally names the chat to deliver the message to (default: a chat named after the ghost).
 	// Using the same portal for different ghosts puts several ghosts in one room.
 	Portal string `json:"portal"`
+	// FromMe sends the message as the login owner (a double puppet) instead of as the ghost.
+	FromMe bool `json:"from_me"`
 }
 
 type injectResponse struct {
@@ -111,11 +113,15 @@ func (c *Connector) inject(ctx context.Context, req *injectRequest) (*injectResp
 	key := networkid.PortalKey{ID: networkid.PortalID(portalID), Receiver: loginID}
 	msgID := networkid.MessageID(fmt.Sprintf("inject-%d-%d", time.Now().UnixNano(), injectCounter.Add(1)))
 	text := req.Text
+	sender := bridgev2.EventSender{Sender: networkid.UserID(req.Ghost)}
+	if req.FromMe {
+		sender = bridgev2.EventSender{IsFromMe: true, SenderLogin: loginID, Sender: networkid.UserID(loginID)}
+	}
 	res := login.QueueRemoteEvent(&simplevent.Message[string]{
 		EventMeta: simplevent.EventMeta{
 			Type:         bridgev2.RemoteEventMessage,
 			PortalKey:    key,
-			Sender:       bridgev2.EventSender{Sender: networkid.UserID(req.Ghost)},
+			Sender:       sender,
 			CreatePortal: true,
 			Timestamp:    time.Now(),
 		},

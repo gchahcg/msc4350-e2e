@@ -26,6 +26,11 @@ the bridge logs and the bridge database. Nothing in `/opt/stacks/element` is tou
 | T7 | extra | negative control: `msc4350: false` means no ghost devices |
 | T8 | extra | the bot's own device keeps its keys and is not impersonatable |
 | T15 | extra | a ghost registered before the feature (no device recorded in `mx_registrations`) gets its device on its next message, once |
+| DP1 | double puppet | access token of a separate login (device without keys): the bridge makes that device impersonatable and a receiving client trusts the message |
+| DP2 | double puppet | token of a device that has its own keys: left alone, message not trusted |
+| DP3 | double puppet | user has cross-signing keys, device not signed by them: message not trusted |
+| DP4 | double puppet | same, but the user's client signed the device with the self-signing key: trusted |
+| DP5 | double puppet | `as_token:` double puppeting: the user gets a device with the bot's device ID, trusted |
 
 | T9 | server | a user who shares no room with the ghost gets the complete device |
 | T10 | server | a user with cross-signing keys gets the same, signed only by the bot |
